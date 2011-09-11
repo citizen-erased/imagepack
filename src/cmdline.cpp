@@ -28,91 +28,98 @@ using namespace Imagepack;
  * specified all files in it will be added to the list of files to pack.  if
  * recursive is set, directories are scanned recursively.
  */
-std::vector<std::string> cmd_paths;
+static std::vector<std::string> cmd_paths;
 
 /* 
  * output path including directory. prepended to all written files.
  * "/dir1/file"  will result in files like "/dir1/file.ext"
  */
-std::string cmd_output;
+static std::string cmd_output;
 
 /*
  * size of the packed image sheets. must be in the format [0-9]+x[0-9]+
  */
-std::string cmd_img_size = "2048x2048";
+static std::string cmd_img_size = "2048x2048";
 
 /*
  * results of parsing cmd_img_size.
  */
-int cmd_sheet_width  = 2048;
-int cmd_sheet_height = 2048;
+static int cmd_sheet_width  = 2048;
+static int cmd_sheet_height = 2048;
 
 /* 
  * string to prepend to written files. parsed from cmd_output. if cmd_output is
  * "/dir/file" then the prepend will be "file"
  */
-std::string out_file_prepend;
+static std::string out_file_prepend;
 
 /*
  * directory to write output files. parsed from cmd_output.
  */
-fs::path out_dir;
+static fs::path out_dir;
 
 /*
  * True to keep sheets a power of two. set on the command line.
  */
-bool power_of_two = false;
+static bool power_of_two = false;
 
 /*
  * True to tightly pack sheets. set on the command line.
  */
-bool compact = false;
+static bool compact = false;
 
 /*
  * true to scan directories recursively when building the list of files to
  * pack. set on the command line.
  */
-bool recursive = false;
+static bool recursive = false;
 
 /*
  * true to not write any files. set on the command line.
  */
-bool dry_run = false;
+static bool dry_run = false;
 
 /*
  * true to give detailed output. set on the command line.
  */
-bool verbose = false;
+static bool verbose = false;
 
 /*
  * true to disable printing. set on the command line.
  */
-bool silent = false;
+static bool silent = false;
 
 /*
  * 0 disables all printing. print levels defined in the Imagepack namespace
  */
-int print_mode = 1;
+static int print_mode = 1;
 
 /*
  * Where to use as the origin when computing texture coordinates for the
  * definitions file. cmd_tex_coord_origin is taken in on the command line and
  * parsed to set tex_coord_origin.
  */
-std::string cmd_tex_coord_origin = "bottom-left";
-int         tex_coord_origin     = BOTTOM_LEFT;
+static std::string cmd_tex_coord_origin = "bottom-left";
+static int         tex_coord_origin     = BOTTOM_LEFT;
 
-std::string help_str;
+/*
+ * Command line help string.
+ */
+static std::string help_str;
 
-static void parseCmdLine(int argc, char *argv[]);
-static bool loadImage(const fs::path &path, PixelData &pixels);
-static void saveImage(const fs::path &path, PixelData &pixels);
-static std::string getSheetDefinitions(const fs::path &path, Sheet *s);
-static void FreeImageErrorHandler(FREE_IMAGE_FORMAT fif, const char *message);
 
-static void print(const char *str, int type=INFO);
-static void print(const std::string &str, int type=INFO);
-static void print(const format &fmt, int type=INFO);
+static void         parseCmdLine(int argc, char *argv[]);
+static void         findFiles(std::vector<fs::path> &files);
+static void         writeData();
+static std::string  getSheetDefinitions(const fs::path &path, Sheet *s);
+static bool         loadImage(const fs::path &path, PixelData &pixels);
+static void         saveImage(const fs::path &path, PixelData &pixels);
+static void         FreeImageErrorHandler(FREE_IMAGE_FORMAT fif, const char *message);
+
+static void         print(const char *str, int type=INFO);
+static void         print(const std::string &str, int type=INFO);
+static void         print(const format &fmt, int type=INFO);
+
 
 
 class CmdPacker : public Packer
@@ -122,13 +129,14 @@ public:
     void print(const char *str, int type) { ::print(str, type); }
 };
 
+static CmdPacker packer;
+
 
 
 int main(int argc, char *argv[])
 {
     help_str = std::string((char*)cmd_help, cmd_help_len);
     parseCmdLine(argc, argv);
-
     FreeImage_SetOutputMessage(FreeImageErrorHandler);
 
     out_dir          = fs::path(cmd_output).parent_path();
@@ -137,7 +145,31 @@ int main(int argc, char *argv[])
     if(out_file_prepend == "." && boost::ends_with(fs::path(cmd_output).string(), "/"))
         out_file_prepend = "";
 
-    std::vector<fs::path> files, paths(cmd_paths.begin(), cmd_paths.end());
+    std::vector<fs::path> files;
+    findFiles(files);
+
+    print(format("%d files found\n") % files.size());
+
+    if(files.empty())
+        return EXIT_SUCCESS;
+
+    packer.setSheetSize(cmd_sheet_width, cmd_sheet_height);
+    packer.setTexCoordOrigin(tex_coord_origin);
+    packer.setPowerOfTwo(power_of_two);
+    packer.setCompact(compact);
+
+    for(size_t i = 0; i < files.size(); i++)
+        packer.addImage(files[i].string());
+
+    packer.pack();
+    writeData();
+
+    return EXIT_SUCCESS;
+}
+
+void findFiles(std::vector<fs::path> &files)
+{
+    std::vector<fs::path> paths(cmd_paths.begin(), cmd_paths.end());
 
     while(!paths.empty())
     {
@@ -153,30 +185,18 @@ int main(int argc, char *argv[])
                     paths.push_back(it->path());
         }
     }
+}
 
-    print(format("%d files found\n") % files.size());
-
-    if(files.empty())
-        return EXIT_SUCCESS;
-
-    CmdPacker packer;
-    packer.setSheetSize(cmd_sheet_width, cmd_sheet_height);
-    packer.setTexCoordOrigin(tex_coord_origin);
-    packer.setPowerOfTwo(power_of_two);
-    packer.setCompact(compact);
-
-    for(size_t i = 0; i < files.size(); i++)
-        packer.addImage(files[i].string());
-
-    packer.pack();
-
-    if(!dry_run)
-        fs::create_directories(out_dir);
+void writeData()
+{
+    std::string defs;
+    fs::path defs_path = out_dir / (out_file_prepend + ".defs");
 
     print(format("write directory   = %s\n")     % out_dir);
     print(format("write file prefix = \"%s\"\n") % out_file_prepend);
 
-    std::string defs;
+    if(!dry_run) fs::create_directories(out_dir);
+
     for(int i = 0; i < packer.numSheets(); i++)
     {
         std::string name = str(format("%s%d.%s") % out_file_prepend % i % "png");
@@ -185,9 +205,7 @@ int main(int argc, char *argv[])
         defs += getSheetDefinitions(out_dir / name, packer.getSheet(i));
     }
 
-    fs::path defs_path = out_dir / (out_file_prepend + ".defs");
     print(format("writing definitions to %s\n") % defs_path);
-
     if(!dry_run)
     {
         fs::ofstream out(defs_path);
@@ -196,9 +214,28 @@ int main(int argc, char *argv[])
         if(out.fail())
             print(format("failed to write %s\n") % defs_path, VERBOSE);
     }
-
-    return EXIT_SUCCESS;
 }
+
+std::string getSheetDefinitions(const fs::path &path, Sheet *s)
+{
+    std::string out;
+
+    for(size_t i = 0; i < s->images.size(); i++)
+    {
+        Image *img = s->images[i];
+
+        for(size_t j = 0; j < img->names.size(); j++)
+        {
+            out += str(format("%s\n") % img->names[j]);
+            out += str(format("%s\n") % path.string());
+            out += str(format("%d %d %d %d\n") % img->source_x % img->source_y % img->source_width % img->source_height);
+            out += str(format("%f %f %f %f\n") % img->s0 % img->s1 % img->t0 % img->t1);
+        }
+    }
+
+    return out;
+}
+
 
 void parseCmdLine(int argc, char *argv[])
 {
@@ -407,7 +444,6 @@ void saveImage(const fs::path &path, PixelData &pixels)
     FreeImage_Unload(dib);
 }
 
-
 void FreeImageErrorHandler(FREE_IMAGE_FORMAT fif, const char *message) {
     print("FreeImage Error", VERBOSE);
 
@@ -415,26 +451,6 @@ void FreeImageErrorHandler(FREE_IMAGE_FORMAT fif, const char *message) {
         print(format(" (%s Format)") % FreeImage_GetFormatFromFIF(fif), VERBOSE);
 
     print(format(": %s\n") % message, VERBOSE);
-}
-
-std::string getSheetDefinitions(const fs::path &path, Sheet *s)
-{
-    std::string out;
-
-    for(size_t i = 0; i < s->images.size(); i++)
-    {
-        Image *img = s->images[i];
-
-        for(size_t j = 0; j < img->names.size(); j++)
-        {
-            out += str(format("%s\n") % img->names[j]);
-            out += str(format("%s\n") % path.string());
-            out += str(format("%d %d %d %d\n") % img->source_x % img->source_y % img->source_width % img->source_height);
-            out += str(format("%f %f %f %f\n") % img->s0 % img->s1 % img->t0 % img->t1);
-        }
-    }
-
-    return out;
 }
 
 

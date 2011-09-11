@@ -6,16 +6,6 @@
 using boost::format;
 using namespace Imagepack;
 
-static bool imageCompare(Image *a, Image *b)
-{
-    return a->width*a->height > b->width*b->height;
-    //int area_a = a->width * a->height;
-    //int area_b = b->width * b->height;
-
-    //if(area_a == area_b)
-    //    ;
-    //return area_a < area_b;
-}
 
 static bool imageHeightCompare(Image *a, Image *b)
 {
@@ -137,60 +127,6 @@ Packer::Packer()
     power_of_two = false;
 }
 
-#if 0
-void Packer::pack()
-{
-    print(format("packing %d images\n") % images.size());
-
-    clearNodes();
-    sheets.clear();
-
-    for(size_t i = 0, n = images.size(); i < n; i++)
-        images[i]->is_packed = false;
-
-    int num_packed;
-    std::vector<Image*> to_pack;
-    to_pack.reserve(images.size());
-
-    do
-    {
-        num_packed = 0;
-        to_pack.clear();
-
-        for(size_t i = 0, n = images.size(); i < n; i++)
-            if(!images[i]->is_packed && validImageSize(images[i]))
-                to_pack.push_back(images[i]);
-
-        std::stable_sort(to_pack.begin(), to_pack.end(), imageCompare);
-
-        sheets.resize(sheets.size()+1);
-        Sheet *s = &sheets.back();
-        s->width = sheet_width;
-        s->height = sheet_height;
-        s->root  = createNode(0, 0, sheet_width, sheet_height);
-
-        for(size_t i = 0, n = to_pack.size(); i < n; i++)
-        {
-            if(insertR(s->root, to_pack[i]))
-            {
-                to_pack[i]->is_packed = true;
-                s->images.push_back(to_pack[i]);
-                num_packed++;
-            }
-        }
-    } while(num_packed > 0);
-
-
-    if(!sheets.empty() && sheets.back().images.empty())
-        sheets.pop_back();
-
-    computeTexCoords();
-    printPackingStats();
-    blitSheets();
-
-}
-#endif
-
 void Packer::pack()
 {
     print(format("packing %d images\n") % images.size());
@@ -239,7 +175,6 @@ int Packer::packSheet(std::vector<Image*> &to_pack, Sheet *s)
 {
     int num_packed = 0;
 
-    //std::stable_sort(to_pack.begin(), to_pack.end(), imageCompare);
     std::stable_sort(to_pack.begin(), to_pack.end(), imageHeightCompare);
     std::stable_sort(to_pack.begin(), to_pack.end(), imageWidthCompare);
 
