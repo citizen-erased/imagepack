@@ -1,0 +1,100 @@
+---------- Building ----------
+run scons in the root directory.
+
+required libraries: freeimage, boost, boost-program-options, boost-filesystem
+
+
+
+
+
+---------- imagepack ----------
+
+Usage: imagepack [OPTIONS] [SOURCES...]
+
+imagepack packs many small images into fewer large images. Each input image is
+referred to as a sprite. Each output image contains one or more sprites and is
+called a sheet. A definitions file is written that contains information about
+where each sprite is packed in the sheets.
+
+Input sources are given as positional arguments. Files and directories
+can be given as input sources. Any input directories will be scanned for files.
+If --recursive is set then all input directories will be recursed into. Files
+do not have to be image files. If a file cannot be read as an image it is
+ignored.
+
+The --output destination is prefixed to all files written. If the output is set
+to foo/bar_ then files like foo/bar_0.png will be written. If the destination
+is to be a directory then it must end in a forward slash.  Specifying foo/bar/
+will result in files like foo/bar/0.png. Sheet images are named in the form
+[0-9]+.png. The definitions path is the output destination with ".defs"
+appended.
+
+The size of the generated sheets can be set using the --image-size options.
+The size should be specified in the form [0-9]+x[0-9]+ where the fist number is
+the width and the second is the height. Specifying 1024x512 will result in
+sheets that are 1024 pixels wide and 512 pixels tall. If the --compact option
+is specified --image-size is used as a maximum size and smaller sheets are
+created if possible.
+
+Specifying --power-of-two ensures that sheet width and height are a power of
+two. If a dimension in --image-size is not a power of two the next greatest
+power of two is used.
+
+Normalized texture coordinates for each sprite are computed and written to the
+definitions file.  If the image is visualized as a 2D grid of squares the
+coordinates specify the point at the center of a square. Coordinates are
+relative to the origin specified by --tex-coord-origin.
+
+The definitions file maps input images to their packed information. It can be
+loaded directly but it is probably more useful for a separate tool to parse the
+definitions into a format that better suits the application using the sprite
+sheets.
+
+Definitions File Format:
+    Each packed sprite has a corresponding entry in the definitions file.  A
+    single entry consists of four lines:
+
+    1. Path to sheet image that contains the sprite.
+
+    2. Path to the sprite's original image.
+
+    3. Four integer coordinates representing the rectangle that contains the
+       sprite in the sheet. Coordinates are relative to the top left of the
+       sheet. The first two coordinates specify the x and y coordinates of the
+       top left pixel of the sprite. The second two coordinates specify the
+       width and height of the sprite in pixels. Coordinates start at 0.
+
+    4. Normalized texture coordinates of the sprite. The first two values
+       specify the texture coordinates at the bottom left pixel of the packed
+       sprite. The second two values specify the texture coordinates at the top
+       right. 
+
+    The file ends in a new line character.
+
+    Example definitions:
+        data/sprites0.png
+        characters/mario.png
+        0 0 32 32
+        0.000244 0.015381 0.984619 0.999756
+        data/sprites0.png
+        items/coin.png
+        32 0 32 32
+        0.015869 0.031006 0.984619 0.999756
+
+Examples:
+    Pack mario.png and coin.png into a sprite sheet as small as possible
+    (smaller than the default --image-size).  The sheet image is written to
+    sprites0.png and the definitions file written to sprites.def in the current
+    directory.
+
+    imagepack -c -o sprites mario.png coin.png
+
+
+    Create sprite sheets that are a power of two and no bigger than 256x256
+    from all files under the folder "data/world1". Sheets are written to
+    "sprites/world1{sheet_number}.png" and the definitions file is written to
+    "sprites/world1.def".
+
+    imagepack -rpc -s 256x256 -o sprites/world1 data/world1
+
+
