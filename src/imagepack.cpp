@@ -19,8 +19,75 @@ static bool imageWidthCompare(Image *a, Image *b)
 
 
 
-Pixel::Pixel()                                   : r(1.0f), g(0.0f), b(1.0f), a(1.0f) {}
-Pixel::Pixel(float r, float g, float b, float a) : r(r),    g(g),    b(b),    a(a)    {}
+/*--------------------------------------------------------------------------*
+ *
+ * PixelFloat
+ *
+ *--------------------------------------------------------------------------*/
+PixelFloat::PixelFloat()                                   : r(1.0f), g(0.0f), b(1.0f), a(1.0f) {}
+PixelFloat::PixelFloat(float r, float g, float b, float a) : r(r),    g(g),    b(b),    a(a)    {}
+
+void PixelFloat::set(float r, float g, float b, float a)
+{
+    this->r = r; this->g = g; this->b = b; this->a = a;
+}
+
+uint8_t PixelFloat::redByte()   const { return r * 255.0f; }
+uint8_t PixelFloat::greenByte() const { return g * 255.0f; }
+uint8_t PixelFloat::blueByte()  const { return b * 255.0f; }
+uint8_t PixelFloat::alphaByte() const { return a * 255.0f; }
+
+bool PixelFloat::operator==(const PixelFloat &o) const
+{
+    if(std::abs(r - o.r) > 0.00001f)
+        return false;
+    if(std::abs(g - o.g) > 0.00001f)
+        return false;
+    if(std::abs(b - o.b) > 0.00001f)
+        return false;
+    if(std::abs(a - o.a) > 0.00001f)
+        return false;
+    return true;
+}
+
+bool PixelFloat::operator!=(const PixelFloat &o) const { return !(*this == o); }
+
+
+
+/*--------------------------------------------------------------------------*
+ *
+ * Pixel32
+ *
+ *--------------------------------------------------------------------------*/
+
+Pixel32::Pixel32()                                   : rgba(0xFF00FFFF) {}
+Pixel32::Pixel32(float r, float g, float b, float a) { set(r, g, b, a); }
+
+void Pixel32::set(float r, float g, float b, float a)
+{
+    uint32_t ir = static_cast<uint32_t>(r*255.0f) << 24;
+    uint32_t ig = static_cast<uint32_t>(g*255.0f) << 16;
+    uint32_t ib = static_cast<uint32_t>(b*255.0f) <<  8;
+    uint32_t ia = static_cast<uint32_t>(a*255.0f) <<  0;
+
+    rgba = (ir & 0xFF000000) | (ig & 0x00FF0000) | (ib & 0x0000FF00) | (ia & 0x000000FF);
+}
+
+uint8_t Pixel32::redByte()   const { return (rgba >> 24) & 0xFF; }
+uint8_t Pixel32::greenByte() const { return (rgba >> 16) & 0xFF; }
+uint8_t Pixel32::blueByte()  const { return (rgba >>  8) & 0xFF; }
+uint8_t Pixel32::alphaByte() const { return (rgba >>  0) & 0xFF; }
+
+bool Pixel32::operator==(const Pixel32 &o) const { return rgba == o.rgba; }
+bool Pixel32::operator!=(const Pixel32 &o) const { return !(*this == o); }
+
+
+
+/*--------------------------------------------------------------------------*
+ *
+ * PixelData
+ *
+ *--------------------------------------------------------------------------*/
 
 PixelData::PixelData()
 {
@@ -37,23 +104,23 @@ void PixelData::resize(int width, int height)
 
 void PixelData::set(int x, int y, float r, float g, float b, float a)
 {
-    if(0 <= x && x < width() && 0 <= y && y < height())
-    {
-        pixels[x][y] = Pixel(r, g, b, a);
-        checksum_dirty = true;
-    }
+    set(x, y, Pixel(r, g, b, a));
 }
 
 void PixelData::set(int x, int y, Pixel p)
 {
-    set(x, y, p.r, p.g, p.b, p.a);
+    if(0 <= x && x < width() && 0 <= y && y < height())
+    {
+        pixels[x][y] = p;
+        checksum_dirty = true;
+    }
 }
 
 void PixelData::fill(float r, float g, float b, float a)
 {
     for(int x = 0, w = width(); x < w; x++)
         for(int y = 0, h = height(); y < h; y++)
-            pixels[x][y] = Pixel(r, g, b, a);
+            pixels[x][y].set(r, g, b, a);
     checksum_dirty = true;
 }
 
@@ -90,25 +157,26 @@ bool PixelData::operator==(const PixelData &o) const
      * likely to be different so the pixel comparison will return false early
      * enough.
      */
-    //if(getChecksum() != o.getChecksum())
-    //    return false;
+#if 0
+    if(getChecksum() != o.getChecksum())
+        return false;
+#endif
 
     for(int x = 0, w = width(); x < w; x++)
         for(int y = 0, h = height(); y < h; y++)
-        {
-            if(std::abs(pixels[x][y].r - o.pixels[x][y].r) > 0.00001f)
+            if(pixels[x][y] != o.pixels[x][y])
                 return false;
-            if(std::abs(pixels[x][y].g - o.pixels[x][y].g) > 0.00001f)
-                return false;
-            if(std::abs(pixels[x][y].b - o.pixels[x][y].b) > 0.00001f)
-                return false;
-            if(std::abs(pixels[x][y].a - o.pixels[x][y].a) > 0.00001f)
-                return false;
-        }
 
     return true;
 }
 
+
+
+/*--------------------------------------------------------------------------*
+ *
+ * Packed Image
+ *
+ *--------------------------------------------------------------------------*/
 Image::Image()
 {
     x = y = width = height = 0;
@@ -117,6 +185,115 @@ Image::Image()
     is_packed = false;
 }
 
+
+
+/*--------------------------------------------------------------------------*
+ *
+ * sheet
+ *
+ *--------------------------------------------------------------------------*/
+
+Sheet::Sheet(int width, int height)
+{
+    this->width  = width;
+    this->height = height;
+    root = createNode(0, 0, width, height);
+}
+
+bool Sheet::insert(Image *img)
+{
+    if(insertR(root, img))
+    {
+        images.push_back(img);
+        return true;
+    }
+
+    return false;
+}
+
+bool Sheet::insertR(Node *node, Image *img)
+{
+    if(node->left && node->right)
+    {
+        return insertR(node->left, img) || insertR(node->right, img);
+    }
+    else
+    {
+        if(node->img || img->width > node->width || img->height > node->height)
+            return false;
+
+        if(img->width == node->width && img->height == node->height)
+        {
+            img->x = node->x;
+            img->y = node->y;
+            img->source_x = node->x; //TODO offset when borders implemented
+            img->source_y = node->y;
+            node->img = img;
+            return true;
+        }
+
+        /* 
+         * calculate the remaining width and height in the node. the node is
+         * guaranted to be bigger than the image.
+         */
+        int rw = node->width  - img->width;
+        int rh = node->height - img->height;
+
+        if(rw > rh)
+        {
+            node->left  = createNode(node->x,            node->y, img->width, node->height);
+            node->right = createNode(node->x+img->width, node->y, rw,         node->height);
+        }
+        else
+        {
+            node->left  = createNode(node->x, node->y,             node->width, img->height);
+            node->right = createNode(node->x, node->y+img->height, node->width, rh);
+        }
+
+        return insertR(node->left, img);
+    }
+
+    return false;
+}
+
+void Sheet::blit()
+{
+    pixels.resize(width, height);
+    pixels.fill(0.0f, 0.0f, 0.0f, 0.0f); //TODO fill colour
+    blitR(root);
+}
+
+void Sheet::blitR(Node *node)
+{
+    if(!node) return;
+    
+    if(node->img)
+    {
+        for(int x = 0; x < node->width; x++)
+            for(int y = 0; y < node->height; y++)
+                pixels.set(node->x + x, node->y + y, node->img->pixels.get(x, y));
+    }
+    
+    blitR(node->left);
+    blitR(node->right);
+}
+
+Node* Sheet::createNode(int x, int y, int w, int h)
+{
+    Node *n = node_pool.construct();
+    nodes.push_back(n);
+    n->img = NULL; n->x = x; n->y = y; n->width = w; n->height = h;
+    return n;
+}
+
+
+
+
+/*--------------------------------------------------------------------------*
+ *
+ * Packer
+ *
+ *--------------------------------------------------------------------------*/
 
 Packer::Packer()
 {
@@ -132,7 +309,6 @@ void Packer::pack()
     print(format("packing %d images\n") % images.size());
 
     clearSheets();
-    clearNodes();
 
     for(size_t i = 0, n = images.size(); i < n; i++)
         images[i]->is_packed = false;
@@ -160,9 +336,8 @@ void Packer::pack()
 
     if(compact && !sheets.empty())
     {
-        Sheet *s = sheets.back();
-        to_pack.assign(s->images.begin(), s->images.end());
-        destroySheet(s);
+        to_pack.assign(sheets.back()->images.begin(), sheets.back()->images.end());
+        destroySheet(sheets.back());
         packCompactSheet(to_pack, sheet_width, sheet_height);
     }
 
@@ -180,10 +355,9 @@ int Packer::packSheet(std::vector<Image*> &to_pack, Sheet *s)
 
     for(size_t i = 0, n = to_pack.size(); i < n; i++)
     {
-        if(insertR(s->root, to_pack[i]))
+        if(s->insert(to_pack[i]))
         {
             to_pack[i]->is_packed = true;
-            s->images.push_back(to_pack[i]);
             num_packed++;
         }
         else
@@ -193,9 +367,8 @@ int Packer::packSheet(std::vector<Image*> &to_pack, Sheet *s)
     return num_packed;
 }
 
-Sheet* Packer::packCompactSheet(std::vector<Image*> &to_pack, int max_width, int max_height)
+void Packer::packCompactSheet(std::vector<Image*> &to_pack, int max_width, int max_height)
 {
-    Sheet *s         = NULL;
     int sizes[2]     = {1, 1};
     int max_sizes[2] = {max_width, max_height};
     int size_index   = 0;
@@ -214,9 +387,8 @@ Sheet* Packer::packCompactSheet(std::vector<Image*> &to_pack, int max_width, int
 
     do
     {
-        destroySheet(s);
-        s = createSheet(sizes[0], sizes[1]);
-        packed = packSheet(to_pack, s);
+        Sheet s(sizes[0], sizes[1]);
+        packed = packSheet(to_pack, &s);
 
         if(packed != 0)
             size_index = (size_index + 1) % 2;
@@ -224,49 +396,38 @@ Sheet* Packer::packCompactSheet(std::vector<Image*> &to_pack, int max_width, int
         if(sizes[size_index] == max_sizes[size_index])
             size_index = (size_index + 1) % 2;
 
+        if(packed != (int)to_pack.size())
+            sizes[size_index]++;
+
         /*
          * this shouldn't happen when when max_width and max_height have been
          * obtained from a previous sheet with the same packed images.
          */
-        if(sizes[0] >= max_sizes[0] && sizes[1] >= max_sizes[1])
+        if(sizes[0] > max_sizes[0] && sizes[1] > max_sizes[1])
         {
-            printf("failed to fit all sprites in a compact sheet\n");
+            print("failed to fit all sprites in a compact sheet\n", VERBOSE);
             break;
         }
-
-        sizes[size_index]++;
     } while(packed != (int)to_pack.size());
 
     /*
-     * By increasing width and height at the same time lots of free space
-     * could be created on the right or bottom of the sheet.  This can be
-     * eliminated by finding the maximum extents of the packed images.
+     * sizes can be > max_size if all images can't be packed into an image of
+     * max_size.
      */
-    int max_x = 0, max_y = 0;
-    for(size_t i = 0; i < to_pack.size(); i++)
-    {
-        int ix = to_pack[i]->x + to_pack[i]->width;
-        int iy = to_pack[i]->y + to_pack[i]->height;
-        max_x = std::max(max_x, ix);
-        max_y = std::max(max_y, iy);
-    }
+    sizes[0] = std::min(sizes[0], max_sizes[0]);
+    sizes[1] = std::min(sizes[1], max_sizes[1]);
 
     if(power_of_two)
     {
-        max_x = nextPowerOfTwo(max_x);
-        max_y = nextPowerOfTwo(max_y);
+        sizes[0] = nextPowerOfTwo(sizes[0]);
+        sizes[1] = nextPowerOfTwo(sizes[1]);
     }
 
     /*
-     * If the sheet sizes were to be modified all node and image rectangles
-     * would have to be updated.  Easier to just pack a new sheet and know
-     * everything will fit.
+     * The minimum sheet size to fit all images is known so calling pack sheet
+     * will pack every image successfully.
      */
-    destroySheet(s);
-    s = createSheet(max_x, max_y);
-    packSheet(to_pack, s);
-
-    return s;
+    packSheet(to_pack, createSheet(sizes[0], sizes[1]));
 }
 
 void Packer::computeTexCoords()
@@ -300,7 +461,7 @@ void Packer::printPackingStats()
     print(format("packed %d/%d images into %d sheets\n") % (images.size() - unpacked) % images.size() % sheets.size());
 }
 
-bool Packer::validImageSize(Sheet *s, Image *img)
+bool Packer::validImageSize(const Sheet *s, const Image *img)
 {
     /*
      * addImage discards images that are too small, so just need to check the
@@ -400,93 +561,16 @@ Sheet* Packer::getSheet(int index)
     return NULL;
 }
 
-bool Packer::insertR(Node *node, Image *img)
-{
-    if(node->left && node->right)
-    {
-        return insertR(node->left, img) || insertR(node->right, img);
-    }
-    else
-    {
-        if(node->img || img->width > node->width || img->height > node->height)
-            return false;
-
-        if(img->width == node->width && img->height == node->height)
-        {
-            img->x = node->x;
-            img->y = node->y;
-            img->source_x = node->x; //TODO offset when borders implemented
-            img->source_y = node->y;
-            node->img = img;
-            return true;
-        }
-
-        /* 
-         * calculate the remaining width and height in the node the node is
-         * guaranted to be bigger than the image.
-         */
-        int rw = node->width  - img->width;
-        int rh = node->height - img->height;
-
-        if(rw > rh)
-        {
-            node->left  = createNode(node->x,            node->y, img->width, node->height);
-            node->right = createNode(node->x+img->width, node->y, rw,         node->height);
-        }
-        else
-        {
-            node->left  = createNode(node->x, node->y,             node->width, img->height);
-            node->right = createNode(node->x, node->y+img->height, node->width, rh);
-        }
-
-        return insertR(node->left, img);
-    }
-
-    return false;
-}
-
 void Packer::blitSheets()
 {
     for(size_t i = 0, n = sheets.size(); i < n; i++)
-    {
-        Sheet *s = sheets[i];
-        s->pixels.resize(s->width, s->height);
-        s->pixels.fill(0.0f, 0.0f, 0.0f, 0.0f); //TODO fill colour
-        blitSheetR(s->root, s);
-    }
-}
-
-void Packer::blitSheetR(Node *node, Sheet *sheet)
-{
-    if(!node) return;
-    
-    if(node->img)
-    {
-        for(int x = 0; x < node->width; x++)
-            for(int y = 0; y < node->height; y++)
-                sheet->pixels.set(node->x + x, node->y + y, node->img->pixels.get(x, y));
-    }
-    
-    blitSheetR(node->left, sheet);
-    blitSheetR(node->right, sheet);
-}
-
-Node* Packer::createNode(int x, int y, int w, int h)
-{
-    Node *n = node_pool.construct();
-    nodes.push_back(n);
-    n->img = NULL; n->x = x; n->y = y; n->width = w; n->height = h;
-    return n;
+        sheets[i]->blit();
 }
 
 Sheet* Packer::createSheet(int width, int height)
 {
-    Sheet *s = sheet_pool.construct();
+    Sheet *s = sheet_pool.construct(width, height);
     sheets.push_back(s);
-
-    s->width  = width;
-    s->height = height;
-    s->root   = createNode(0, 0, width, height);
 
     return s;
 }
@@ -495,21 +579,15 @@ void Packer::destroySheet(Sheet *s)
 {
     if(!s) return;
 
-    for(size_t i = 0; i < sheets.size(); i++)
-        if(sheets[i] == s)
-        {
-            sheets.erase(sheets.begin() + i);
-            break;
-        }
-
+    sheets.erase(std::remove(sheets.begin(), sheets.end(), s), sheets.end());
     sheet_pool.destroy(s);
 }
 
-void Packer::clearNodes()
+void Packer::clearSheets()
 {
-    for(size_t i = 0, n = nodes.size(); i < n; i++)
-        node_pool.destroy(nodes[i]);
-    nodes.clear();
+    for(size_t i = 0, n = sheets.size(); i < n; i++)
+        sheet_pool.destroy(sheets[i]);
+    sheets.clear();
 }
 
 void Packer::clearImages()
@@ -519,12 +597,6 @@ void Packer::clearImages()
     images.clear();
 }
 
-void Packer::clearSheets()
-{
-    for(size_t i = 0, n = sheets.size(); i < n; i++)
-        sheet_pool.destroy(sheets[i]);
-    sheets.clear();
-}
 void Packer::print(const char *str, int)
 {
     printf("%s", str);

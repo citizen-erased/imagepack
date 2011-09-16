@@ -7,6 +7,7 @@
 #include <boost/multi_array.hpp>
 #include <boost/format.hpp>
 #include <boost/cstdint.hpp>
+#include <boost/utility.hpp>
 
 namespace Imagepack
 {
@@ -23,15 +24,53 @@ enum
 /*--------------------------------------------------------------------------*
  * Pixel
  *--------------------------------------------------------------------------*/
-class Pixel
+class PixelFloat
 {
-public:
+private:
     float r,g,b,a;
 
-    Pixel();
-    Pixel(float r, float g, float b, float a);
+public:
+    PixelFloat();
+    PixelFloat(float r, float g, float b, float a);
+
+    void set(float r, float g, float b, float a);
+    
+    uint8_t redByte()   const;
+    uint8_t greenByte() const;
+    uint8_t blueByte()  const;
+    uint8_t alphaByte() const;
+
+    bool operator==(const PixelFloat &o) const;
+    bool operator!=(const PixelFloat &o) const;
 };
 
+class Pixel32
+{
+private:
+    uint32_t rgba;
+
+public:
+    Pixel32();
+    Pixel32(float r, float g, float b, float a);
+
+    void set(float r, float g, float b, float a);
+
+    uint8_t redByte()   const;
+    uint8_t greenByte() const;
+    uint8_t blueByte()  const;
+    uint8_t alphaByte() const;
+
+    bool operator==(const Pixel32 &o) const;
+    bool operator!=(const Pixel32 &o) const;
+};
+
+/*
+ * Set the pixel type to use.
+ *
+ * Since only 32 bit imges are read at the moment there's no point using
+ * floating point pixels.  Using 32bit saves x4 memory and is a bit faster
+ */
+typedef Pixel32 Pixel;
 
 
 /*--------------------------------------------------------------------------*
@@ -122,14 +161,26 @@ struct Node
 
 
 /*--------------------------------------------------------------------------*
- * Sheet
+ * sheet
  *--------------------------------------------------------------------------*/
-struct Sheet
+class Sheet : private boost::noncopyable
 {
+public:
+    boost::object_pool<Node> node_pool;
     std::vector<Image*> images;
+    std::vector<Node*> nodes;
     int width, height;
     Node *root;
     PixelData pixels;
+
+public:
+    Sheet(int width, int height);
+
+    bool insert(Image *img);
+    bool insertR(Node *node, Image *img);
+    void blit();
+    void blitR(Node *node);
+    Node* createNode(int x, int y, int w, int h);
 };
 
 
@@ -170,22 +221,18 @@ public:
 
 private:
     int                         packSheet(std::vector<Image*> &to_pack, Sheet *s);
-    Sheet*                      packCompactSheet(std::vector<Image*> &to_pack, int max_width, int max_height);
+    void                        packCompactSheet(std::vector<Image*> &to_pack, int max_width, int max_height);
     
-    bool                        insertR(Node *node, Image *img);
     void                        blitSheets();
-    void                        blitSheetR(Node *node, Sheet *sheet);
 
-    bool                        validImageSize(Sheet *s, Image *img);
+    bool                        validImageSize(const Sheet *s, const Image *img);
     void                        computeTexCoords();
     void                        printPackingStats();
 
-    Node*                       createNode(int x, int y, int w, int h);
     Sheet*                      createSheet(int width, int height);
     void                        destroySheet(Sheet *s);
-    void                        clearNodes();
-    void                        clearImages();
     void                        clearSheets();
+    void                        clearImages();
 
     unsigned int                nextPowerOfTwo(unsigned int n) const;
 

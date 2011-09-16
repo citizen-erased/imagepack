@@ -389,11 +389,11 @@ bool loadImage(const fs::path &path, PixelData &pixels)
     int bytes_per_pixel = FreeImage_GetLine(img) / FreeImage_GetWidth(img);
     pixels.resize(FreeImage_GetWidth(img), FreeImage_GetHeight(img));
 
-    for(int y = 0; y < pixels.height(); y++)
+    for(int y = 0, h = pixels.height(); y < h; y++)
     {
-        BYTE *bits = FreeImage_GetScanLine(img, pixels.height()-y-1);
+        BYTE *bits = FreeImage_GetScanLine(img, h-y-1);
 
-        for(int x = 0; x < pixels.width(); x++)
+        for(int x = 0, w = pixels.width(); x < w; x++)
         {
             float r = bits[FI_RGBA_RED]   / 255.0f;
             float g = bits[FI_RGBA_GREEN] / 255.0f;
@@ -422,10 +422,10 @@ void saveImage(const fs::path &path, PixelData &pixels)
 
         for(int x = 0; x < pixels.width(); x++)
         {
-            bits[FI_RGBA_RED]   = pixels.get(x, y).r * 255.0f;
-            bits[FI_RGBA_GREEN] = pixels.get(x, y).g * 255.0f;
-            bits[FI_RGBA_BLUE]  = pixels.get(x, y).b * 255.0f;
-            bits[FI_RGBA_ALPHA] = pixels.get(x, y).a * 255.0f;
+            bits[FI_RGBA_RED]   = pixels.get(x, y).redByte();
+            bits[FI_RGBA_GREEN] = pixels.get(x, y).greenByte();
+            bits[FI_RGBA_BLUE]  = pixels.get(x, y).blueByte();
+            bits[FI_RGBA_ALPHA] = pixels.get(x, y).alphaByte();
 
             bits += 4;
         }
