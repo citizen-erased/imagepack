@@ -1,22 +1,20 @@
 #include <cstdio>
 #include <algorithm>
 #include <boost/crc.hpp>
+#include "output.h"
+#include "image_io.h"
 #include "imagepack.h"
 
 using boost::format;
 using namespace Imagepack;
 
 
-static bool imageHeightCompare(Image *a, Image *b)
-{
-    return a->height > b->height;
-}
+namespace {
 
-static bool imageWidthCompare(Image *a, Image *b)
-{
-    return a->width > b->width;
-}
+bool imageHeightCompare(Image *a, Image *b) { return a->height > b->height; }
+bool imageWidthCompare(Image *a, Image *b)  { return a->width > b->width;   }
 
+} /* end unnamed namespace */
 
 
 /*--------------------------------------------------------------------------*
@@ -118,9 +116,23 @@ void PixelData::set(int x, int y, Pixel p)
 
 void PixelData::fill(float r, float g, float b, float a)
 {
-    for(int x = 0, w = width(); x < w; x++)
-        for(int y = 0, h = height(); y < h; y++)
-            pixels[x][y].set(r, g, b, a);
+    fillRect(0, 0, width()-1, height()-1, Pixel(r, g, b, a));
+}
+
+void PixelData::fillRect(int x0, int y0, int x1, int y1, Pixel p)
+{
+    if(x0 > x1) std::swap(x0, x1);
+    if(y0 > y1) std::swap(y0, y1);
+
+    x0 = std::min(std::max(0, x0), width() -1);
+    x1 = std::min(std::max(0, x1), width() -1);
+    y0 = std::min(std::max(0, y0), height()-1);
+    y1 = std::min(std::max(0, y1), height()-1);
+
+    for(int x = x0; x <= x1; x++)
+        for(int y = y0; y <= y1; y++)
+            pixels[x][y] = p;
+
     checksum_dirty = true;
 }
 
@@ -185,6 +197,12 @@ Image::Image()
     is_packed = false;
 }
 
+bool Image::loadData()
+{
+    assert(!names.empty());
+    return loadImage(names.front(), pixels);
+}
+
 
 
 /*--------------------------------------------------------------------------*
@@ -197,7 +215,8 @@ Sheet::Sheet(int width, int height)
 {
     this->width  = width;
     this->height = height;
-    root = createNode(0, 0, width, height);
+    extrude      = 0;
+    root         = createNode(0, 0, width, height);
 }
 
 bool Sheet::insert(Image *img)
@@ -226,8 +245,8 @@ bool Sheet::insertR(Node *node, Image *img)
         {
             img->x = node->x;
             img->y = node->y;
-            img->source_x = node->x; //TODO offset when borders implemented
-            img->source_y = node->y;
+            img->source_x = node->x + extrude;
+            img->source_y = node->y + extrude;
             node->img = img;
             return true;
         }
@@ -256,26 +275,60 @@ bool Sheet::insertR(Node *node, Image *img)
     return false;
 }
 
-void Sheet::blit()
+void Sheet::blit(PixelData &pixels)
 {
     pixels.resize(width, height);
     pixels.fill(0.0f, 0.0f, 0.0f, 0.0f); //TODO fill colour
-    blitR(root);
+    blitR(root, pixels);
 }
 
-void Sheet::blitR(Node *node)
+void Sheet::blitR(Node *node, PixelData &pixels)
 {
     if(!node) return;
     
     if(node->img)
     {
-        for(int x = 0; x < node->width; x++)
-            for(int y = 0; y < node->height; y++)
-                pixels.set(node->x + x, node->y + y, node->img->pixels.get(x, y));
+        Image *img = node->img;
+
+        if(extrude > 0)
+        {
+            int src_x0 = img->source_x - 1;
+            int src_y0 = img->source_y - 1;
+            int src_x1 = img->source_x + img->source_width;
+            int src_y1 = img->source_y + img->source_height;
+
+            int dst_x0 = src_x0 - extrude + 1;
+            int dst_y0 = src_y0 - extrude + 1;
+            int dst_x1 = src_x1 + extrude - 1;
+            int dst_y1 = src_y1 + extrude - 1;
+
+            pixels.fillRect(src_x0, src_y0, dst_x0, dst_y0, img->pixels.get(0,                   0                   ));
+            pixels.fillRect(src_x1, src_y0, dst_x1, dst_y0, img->pixels.get(img->source_width-1, 0                   ));
+            pixels.fillRect(src_x1, src_y1, dst_x1, dst_y1, img->pixels.get(img->source_width-1, img->source_height-1));
+            pixels.fillRect(src_x0, src_y1, dst_x0, dst_y1, img->pixels.get(0,                   img->source_height-1));
+
+            for(int x = 0; x < img->source_width; x++)
+            {
+                int dst_x = node->x + extrude + x;
+                pixels.fillRect(dst_x, src_y0, dst_x, dst_y0, img->pixels.get(x, 0                   ));
+                pixels.fillRect(dst_x, src_y1, dst_x, dst_y1, img->pixels.get(x, img->source_height-1));
+            }
+
+            for(int y = 0; y < img->source_height; y++)
+            {
+                int dst_y = node->y + extrude + y;
+                pixels.fillRect(src_x0, dst_y, dst_x0, dst_y, img->pixels.get(0,                   y));
+                pixels.fillRect(src_x1, dst_y, dst_x1, dst_y, img->pixels.get(img->source_width-1, y));
+            }
+        }
+
+        for(int x = 0; x < img->source_width; x++)
+            for(int y = 0; y < img->source_height; y++)
+                pixels.set(node->x + x + extrude, node->y + y + extrude, img->pixels.get(x, y));
     }
     
-    blitR(node->left);
-    blitR(node->right);
+    blitR(node->left,  pixels);
+    blitR(node->right, pixels);
 }
 
 Node* Sheet::createNode(int x, int y, int w, int h)
@@ -286,6 +339,12 @@ Node* Sheet::createNode(int x, int y, int w, int h)
     return n;
 }
 
+bool Sheet::saveImage(boost::filesystem::path &path)
+{
+    PixelData pixels;
+    blit(pixels);
+    return Imagepack::saveImage(path, pixels);
+}
 
 
 
@@ -302,6 +361,7 @@ Packer::Packer()
     tex_coord_origin = BOTTOM_LEFT;
     compact = false;
     power_of_two = false;
+    extrude = 0;
 }
 
 void Packer::pack()
@@ -343,7 +403,6 @@ void Packer::pack()
 
     computeTexCoords();
     printPackingStats();
-    blitSheets();
 }
 
 int Packer::packSheet(std::vector<Image*> &to_pack, Sheet *s)
@@ -465,7 +524,7 @@ bool Packer::validImageSize(const Sheet *s, const Image *img)
 {
     /*
      * addImage discards images that are too small, so just need to check the
-     * height.
+     * maximum dimensions when trying to pack.
      */
     return img->width <= s->width && img->height <= s->height;
 }
@@ -484,7 +543,7 @@ void Packer::addImage(const std::string &name)
     Image *img = image_pool.construct();
     img->names.push_back(name);
 
-    if(!loadPixels(name, img->pixels))
+    if(!img->loadData())
     {
         image_pool.destroy(img);
         return;
@@ -492,10 +551,10 @@ void Packer::addImage(const std::string &name)
 
     img->source_width  = img->pixels.width();
     img->source_height = img->pixels.height();
-    img->width         = img->pixels.width();
-    img->height        = img->pixels.height();
+    img->width         = img->pixels.width()  + extrude*2;
+    img->height        = img->pixels.height() + extrude*2;
 
-    if(!(img->width > 1 && img->height > 1))
+    if(!(img->source_width > 1 && img->source_height > 1))
     {
         print("image is too small. requires width > 1 && height > 1\n");
         image_pool.destroy(img);
@@ -517,6 +576,11 @@ void Packer::addImage(const std::string &name)
     {
         images.push_back(img);
     }
+}
+
+int Packer::numImages()
+{
+    return images.size();
 }
 
 void Packer::setSheetSize(int width, int height)
@@ -549,6 +613,11 @@ void Packer::setTexCoordOrigin(int origin)
     this->tex_coord_origin = origin;
 }
 
+void Packer::setExtrude(int extrude)
+{
+    this->extrude = std::max(0, extrude);
+}
+
 int Packer::numSheets()
 {
     return (int)sheets.size();
@@ -561,15 +630,10 @@ Sheet* Packer::getSheet(int index)
     return NULL;
 }
 
-void Packer::blitSheets()
-{
-    for(size_t i = 0, n = sheets.size(); i < n; i++)
-        sheets[i]->blit();
-}
-
 Sheet* Packer::createSheet(int width, int height)
 {
-    Sheet *s = sheet_pool.construct(width, height);
+    Sheet *s   = sheet_pool.construct(width, height);
+    s->extrude = extrude;
     sheets.push_back(s);
 
     return s;
@@ -597,21 +661,11 @@ void Packer::clearImages()
     images.clear();
 }
 
-void Packer::print(const char *str, int)
-{
-    printf("%s", str);
-}
-
 unsigned int Packer::nextPowerOfTwo(unsigned int n) const
 {
     n -= 1;
     for(unsigned int i = 1; i < sizeof(unsigned int) * 8; i++)
         n |= n >> i;
     return n + 1;
-}
-
-void Packer::print(const boost::format &fmt, int type)
-{
-    print(boost::str(fmt).c_str(), type);
 }
 

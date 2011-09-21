@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <string>
+#include <boost/filesystem.hpp>
 #include <boost/pool/object_pool.hpp>
 #include <boost/multi_array.hpp>
 #include <boost/format.hpp>
@@ -14,9 +15,6 @@ namespace Imagepack
 
 enum
 {
-    INFO = 1,
-    VERBOSE,
-
     BOTTOM_LEFT,
     TOP_LEFT
 };
@@ -92,6 +90,7 @@ public:
     void            set(int x, int y, float r, float g, float b, float a=1.0f);
     void            set(int x, int y, Pixel p);
     void            fill(float r, float g, float b, float a);
+    void            fillRect(int x0, int y0, int x1, int y1, Pixel p);
     Pixel           get(int x, int y) const;
     int             width() const;
     int             height() const;
@@ -141,6 +140,8 @@ public:
 
 public:
     Image();
+
+    bool loadData();
 };
 
 
@@ -170,17 +171,18 @@ public:
     std::vector<Image*> images;
     std::vector<Node*> nodes;
     int width, height;
+    int extrude;
     Node *root;
-    PixelData pixels;
 
 public:
     Sheet(int width, int height);
 
     bool insert(Image *img);
     bool insertR(Node *node, Image *img);
-    void blit();
-    void blitR(Node *node);
+    void blit(PixelData &pixels);
+    void blitR(Node *node, PixelData &pixels);
     Node* createNode(int x, int y, int w, int h);
+    bool saveImage(boost::filesystem::path &path);
 };
 
 
@@ -201,6 +203,7 @@ private:
     int                         sheet_width;
     int                         sheet_height;
     int                         tex_coord_origin;
+    int                         extrude;
     bool                        compact;
     bool                        power_of_two;
 
@@ -209,15 +212,14 @@ public:
 
     void                        pack();
     void                        addImage(const std::string &name);
+    int                         numImages();
     void                        setSheetSize(int width, int height);
     void                        setPowerOfTwo(bool value);
     void                        setCompact(bool value);
     void                        setTexCoordOrigin(int origin);
+    void                        setExtrude(int extrude);
     int                         numSheets();
     Sheet*                      getSheet(int index);
-    virtual bool                loadPixels(const std::string &name, PixelData &pixels) = 0;
-
-    virtual void                print(const char *str, int type=INFO);
 
 private:
     int                         packSheet(std::vector<Image*> &to_pack, Sheet *s);
@@ -235,8 +237,6 @@ private:
     void                        clearImages();
 
     unsigned int                nextPowerOfTwo(unsigned int n) const;
-
-    void                        print(const boost::format &fmt, int type=INFO);
 };
 
 } /* end namespace Imagepack */
