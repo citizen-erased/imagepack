@@ -22,9 +22,9 @@ Linux:
     
 
     Building can also be done easily on the command line using your c++
-    compiler, provided including the help text is disabled. For example:
+    compiler. This will not build the command line help.
 
-      $ gcc -o imagepack src/*.cpp -O3 -DIMAGEPACK_NO_HELP -lboost_filesystem -lboost_program_options -lfreeimage
+      $ gcc -o imagepack src/*.cpp -O3 -lboost_filesystem -lboost_program_options -lfreeimage
 
 
 
