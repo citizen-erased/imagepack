@@ -342,8 +342,7 @@ void parseCmdLine(int argc, char *argv[])
     {
         print(format("%1%\n\n") % e.what());
         print(help_str);
-        print(format("%1%") % desc);
-        exit(EXIT_FAILURE);
+        fatal(format("%1%") % desc);
     }
 
 
@@ -351,20 +350,16 @@ void parseCmdLine(int argc, char *argv[])
     boost::split(strs, cmd_img_size, boost::is_any_of("x"));
 
     if(strs.size() != 2)
-    {
-        print("error parsing image-size\n");
-        exit(EXIT_FAILURE);
-    }
+        fatal("error parsing image-size\n");
 
     try
     {
         cmd_sheet_width  = boost::lexical_cast<int>(strs[0]);
         cmd_sheet_height = boost::lexical_cast<int>(strs[1]);
     }
-    catch(const boost::bad_lexical_cast &e)
+    catch(const boost::bad_lexical_cast&)
     {
-        print("error parsing image-size\n");
-        exit(EXIT_FAILURE);
+        fatal("error parsing image-size\n");
     }
 
     if(cmd_tex_coord_origin == "bottom-left")

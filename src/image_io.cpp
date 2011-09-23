@@ -1,7 +1,27 @@
+/*
+ * Include Windows.h before FreeImage.h since freeimage will define some things
+ * that are supposed to be defined in Widows.h and will break boost.
+ */
+#if _WIN32
+#include <Windows.h>
+#endif
+
 #include <FreeImage.h>
 #include "output.h"
 #include "imagepack.h"
 #include "image_io.h"
+
+#if _WIN32
+    #define IMAGEPACK_FreeImage_GetFileType(a, b)       FreeImage_GetFileTypeU((a), (b))
+    #define IMAGEPACK_FreeImage_GetFIFFromFilename(a)   FreeImage_GetFIFFromFilenameU((a))
+    #define IMAGEPACK_FreeImage_Load(a, b, c)           FreeImage_LoadU((a), (b), (c))
+    #define IMAGEPACK_FreeImage_Save(a, b, c, d)        FreeImage_SaveU((a), (b), (c), (d))
+#else
+    #define IMAGEPACK_FreeImage_GetFileType(a, b)       FreeImage_GetFileType((a), (b))
+    #define IMAGEPACK_FreeImage_GetFIFFromFilename(a)   FreeImage_GetFIFFromFilename((a))
+    #define IMAGEPACK_FreeImage_Load(a, b, c)           FreeImage_Load((a), (b), (c))
+    #define IMAGEPACK_FreeImage_Save(a, b, c, d)        FreeImage_Save((a), (b), (c), (d))
+#endif
 
 using boost::format;
 
@@ -43,10 +63,10 @@ bool loadImage(const boost::filesystem::path &path, PixelData &pixels)
     ensureInitialized();
     print(format("loading image %s\n") % path, VERBOSE);
 
-    FREE_IMAGE_FORMAT fif = FreeImage_GetFileType(path.c_str(), 0);
+    FREE_IMAGE_FORMAT fif = IMAGEPACK_FreeImage_GetFileType(path.c_str(), 0);
 
     if(fif == FIF_UNKNOWN)
-        fif = FreeImage_GetFIFFromFilename(path.c_str());
+		fif = IMAGEPACK_FreeImage_GetFIFFromFilename(path.c_str());
 
     if(fif == FIF_UNKNOWN || !FreeImage_FIFSupportsReading(fif))
     {
@@ -54,7 +74,7 @@ bool loadImage(const boost::filesystem::path &path, PixelData &pixels)
         return false;
     }
 
-    FIBITMAP *dib = FreeImage_Load(fif, path.c_str(), 0);
+    FIBITMAP *dib = IMAGEPACK_FreeImage_Load(fif, path.c_str(), 0);
 
     if(!dib)
     {
@@ -127,7 +147,7 @@ bool saveImage(const boost::filesystem::path &path, PixelData &pixels)
     print(format("writing %s\n") % path, VERBOSE);
 
     if(write_enabled)
-        if(!FreeImage_Save(FIF_PNG, dib, path.c_str(), 0))
+        if(!IMAGEPACK_FreeImage_Save(FIF_PNG, dib, path.c_str(), 0))
         {
             print("failed to write image\n", VERBOSE);
             return false;

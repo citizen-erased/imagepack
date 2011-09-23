@@ -15,10 +15,11 @@ void print(const char *str, int type)
         printf("%s", str);
 }
 
-void print(const std::string &str,  int type) { print(str.c_str(), type);               }
-void print(const boost::format &fmt,int type) { print(boost::str(fmt).c_str(), type);   }
-bool fatal(const boost::format &fmt)          { print(fmt, INFO); exit(EXIT_FAILURE);   }
-void setPrintMode(int mode)                   { print_mode = mode;                      }
+void print(const std::string &str,  int type) { print(str.c_str(), type);                           }
+void print(const boost::format &fmt,int type) { print(boost::str(fmt).c_str(), type);               }
+bool fatal(const boost::format &fmt)          { print(fmt, INFO); exit(EXIT_FAILURE); return false; }
+bool fatal(const std::string &str)            { print(str, INFO); exit(EXIT_FAILURE); return false; }
+void setPrintMode(int mode)                   { print_mode = mode;                                  }
 
 } /* end namespace Imagepack */
 
