@@ -29,7 +29,7 @@ build_dirs = {
 ##############################################################################
 # Command Line
 ##############################################################################
-AddOption("--build", dest="build_type", metavar="[debug|release]", type="choice", choices=["debug", "release"], default="debug", help="The type of build.")
+AddOption("--build", dest="build_type", metavar="[debug|release]", type="choice", choices=["debug", "release"], default="release", help="The type of build.")
 AddOption("--no-help",dest="no-help", action="store_true", default=False, help="Set to not generate and include the help text that gets printed to the console. Set this if xxd is not installed or not in the environment's path.")
 
 build_type = GetOption("build_type")
