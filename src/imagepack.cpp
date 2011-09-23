@@ -446,7 +446,7 @@ void Packer::pack()
 
         to_pack.clear();
         for(size_t i = 0, n = images.size(); i < n; i++)
-            if(!images[i]->is_packed && validImageSize(s, images[i]))
+            if(!images[i]->is_packed)
                 to_pack.push_back(images[i]);
 
         last_packed = packSheet(to_pack, s);
@@ -583,15 +583,6 @@ void Packer::printPackingStats()
         }
 
     print(format("packed %d/%d images into %d sheets\n") % (images.size() - unpacked) % images.size() % sheets.size());
-}
-
-bool Packer::validImageSize(const Sheet *s, const Image *img)
-{
-    /*
-     * addImage discards images that are too small, so just need to check the
-     * maximum dimensions when trying to pack.
-     */
-    return img->width <= s->width && img->height <= s->height;
 }
 
 void Packer::addImage(const std::string &name)

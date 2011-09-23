@@ -220,15 +220,8 @@ void writeData()
 
     for(int i = 0; i < packer.numSheets(); i++)
     {
-#if 0
-        std::string name = str(format("%s%d.%s") % out_file_prepend % i % "png");
-        print(format("writing sheet to %s\n") % (out_dir / name));
-        saveImage(out_dir / name, packer.getSheet(i)->pixels);
-        defs += getSheetDefinitions(out_dir / name, packer.getSheet(i));
-#endif
-
         Sheet *s         = packer.getSheet(i);
-        fs::path dst     = out_dir / str(format("%s%d.%s") % out_file_prepend % i % "png");
+        fs::path dst     = out_dir / str(format("%s%03d.%s") % out_file_prepend % i % "png");
 
         print(format("writing sheet to %s\n") % dst);
         s->saveImage(dst);

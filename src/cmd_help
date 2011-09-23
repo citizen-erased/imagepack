@@ -25,9 +25,9 @@ piped from another program.
 The --output destination is prefixed to all files written. If the output is set
 to foo/bar_ then files like foo/bar_0.png will be written. If the destination
 is to be a directory then it must end in a forward slash.  Specifying foo/bar/
-will result in files like foo/bar/0.png. Sheet images are named in the form
-[0-9]+.png. The definitions path is the output destination with ".defs"
-appended.
+will result in files like foo/bar/000.png. Sheet images are named in the form
+[0-9]+.png. Sheet numbers are 0 padded to be 3 characters long by default.  The
+definitions path is the output destination with ".defs" appended.
 
 The size of the generated sheets can be set using the --image-size options.
 The size should be specified in the form [0-9]+x[0-9]+ where the fist number is

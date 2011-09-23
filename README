@@ -1,9 +1,10 @@
 ---------- Building ----------
 
 required libraries: freeimage, boost, boost_program_options, boost_filesystem
+
 xxd must be installed and in the path to generate the program's command line
-help text.  If xxd is not available imagepack can be compiled without help
-text.
+help text (also found below in the Manual section).  If xxd is not available
+imagepack can be compiled without help text.
 
 
 Linux:
@@ -22,9 +23,9 @@ Linux:
     
 
     Building can also be done easily on the command line using your c++
-    compiler, provided including the help text is disabled. For example:
+    compiler. This will not build the command line help.
 
-      $ gcc -o imagepack src/*.cpp -O3 -DIMAGEPACK_NO_HELP -lboost_filesystem -lboost_program_options -lfreeimage
+      $ gcc -o imagepack src/*.cpp -O3 -lboost_filesystem -lboost_program_options -lfreeimage
 
 
 
@@ -34,7 +35,20 @@ Windows:
 
 
 
--------------------------------
+---------- Licence ----------
+
+The imagepack code is licenced under the MIT licence.
+
+FreeImage is used and licenced under the FreeImage Public Licence (see
+http://freeimage.sourceforge.net for details). imagepack can be built without
+FreeImage by replacing image_io.cpp with an alternative.
+
+Licence text can be found in the licence folder.
+
+
+
+
+---------- Manual ----------
 
 Usage: imagepack [OPTIONS] [SOURCES...]
 
@@ -63,9 +77,9 @@ piped from another program.
 The --output destination is prefixed to all files written. If the output is set
 to foo/bar_ then files like foo/bar_0.png will be written. If the destination
 is to be a directory then it must end in a forward slash.  Specifying foo/bar/
-will result in files like foo/bar/0.png. Sheet images are named in the form
-[0-9]+.png. The definitions path is the output destination with ".defs"
-appended.
+will result in files like foo/bar/000.png. Sheet images are named in the form
+[0-9]+.png. Sheet numbers are 0 padded to be 3 characters long by default.  The
+definitions path is the output destination with ".defs" appended.
 
 The size of the generated sheets can be set using the --image-size options.
 The size should be specified in the form [0-9]+x[0-9]+ where the fist number is

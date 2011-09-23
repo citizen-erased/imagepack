@@ -278,7 +278,6 @@ private:
     
     void                        blitSheets();
 
-    bool                        validImageSize(const Sheet *s, const Image *img);
     void                        computeTexCoords();
     void                        printPackingStats();
 
