@@ -3,13 +3,24 @@ Usage: imagepack [OPTIONS] [SOURCES...]
 imagepack packs many small images into fewer large images. Each input image is
 referred to as a sprite. Each output image contains one or more sprites and is
 called a sheet. A definitions file is written that contains information about
-where each sprite is packed in the sheets.
+where each sprite is packed in the sheets. imagepack has been designed primary
+for packing sprites for 2D games rather than as a general texture atlas tool.
+    
+Multiple sprites with the same image data will all refer to the same image data
+in a sheet.  This can be useful when animations are made using a sprite per
+frame. Any duplicate frames will automatically map to the same packed image
+data.
 
-Input sources are given as positional arguments. Files and directories
-can be given as input sources. Any input directories will be scanned for files.
-If --recursive is set then all input directories will be recursed into. Files
-do not have to be image files. If a file cannot be read as an image it is
-ignored.
+Files and directories can be given as input sources. An input source can be
+specified by --input or multiple sources specified as positional arguments. Any
+input directories will be scanned for files.  If --recursive is set then all
+input directories will be recursed into. If a file cannot be read as an image
+it is ignored.
+
+By specifying --std-in sources will be read from the standard input and
+appended to those given as program options. Each line read is treated as a
+single input. This is useful if sprites to pack are specified in a file or
+piped from another program.
 
 The --output destination is prefixed to all files written. If the output is set
 to foo/bar_ then files like foo/bar_0.png will be written. If the destination
@@ -30,9 +41,24 @@ two. If a dimension in --image-size is not a power of two the next greatest
 power of two is used.
 
 Normalized texture coordinates for each sprite are computed and written to the
-definitions file.  If the image is visualized as a 2D grid of squares the
-coordinates specify the point at the center of a square. Coordinates are
+definitions file. These coordinates map to the center of each pixel; if the
+image is visualized as a 2D grid of squares the coordinates specify the point
+at the center of a square. This implies that the texture coordinates are
+dependent on the size of the sheet they are computed for. Coordinates are
 relative to the origin specified by --tex-coord-origin.
+
+The pixels along the edges of sprites can be extruded using the --extrude
+option. When sprites are tightly packed, some texture filtering methods may
+take samples from the edges of surrounding sprites.  By adding a border around
+a sprite, samples will instead be taken from the border pixels. The number of
+pixels to extrude edges must be specified. Edges are not extruded by default
+(--extrude 0).
+
+The --no-cache options disables image caching in main memory.  All images read
+are stored uncompressed in memory. If caching is disabled, image data are only
+loaded from disk when required and unloaded when not in use. Disabling the
+cache is only necessary when the sprites and sheets cannot all fit into main
+memory at once. By default the cache is enabled.
 
 The definitions file maps input images to their packed information. It can be
 loaded directly but it is probably more useful for a separate tool to parse the

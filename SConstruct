@@ -33,6 +33,7 @@ AddOption("--build", dest="build_type", metavar="[debug|release]", type="choice"
 AddOption("--no-help",dest="no-help", action="store_true", default=False, help="Set to not generate and include the help text that gets printed to the console. Set this if xxd is not installed or not in the environment's path.")
 
 build_type = GetOption("build_type")
+build_help = not GetOption("no-help")
 build_dir  = build_dirs[build_type]
 
 
@@ -51,8 +52,8 @@ elif build_type == "release":
     cpp_defines.append("NDEBUG")
     cpp_flags.append("-O3")
 
-if GetOption("no-help"):
-    cpp_defines.append("NO_HELP")
+if build_help:
+    cpp_defines.append("IMAGEPACK_BUILD_HELP")
 
 env = Environment(
     CCFLAGS     = cpp_flags,
@@ -69,7 +70,7 @@ env.Append(BUILDERS = {
 # Building
 ##############################################################################
 
-if not GetOption("no-help"):
+if build_help:
     cmd_help = env.HelpGenerator(cmd_help_src, chdir=1, srcdir=build_dir)
 
 prog = env.Program(binary_name, src, LIBS=libs, srcdir=build_dir)

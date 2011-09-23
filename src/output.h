@@ -17,6 +17,7 @@ void setPrintMode(int mode);
 void print(const char *str, int type=INFO);
 void print(const std::string &str, int type=INFO);
 void print(const boost::format &fmt, int type=INFO);
+bool fatal(const boost::format &fmt);
 
 }
 

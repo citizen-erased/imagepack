@@ -79,23 +79,20 @@ typedef boost::multi_array<Pixel, 2> pixel_array_t;
 class PixelData
 {
 private:
-    pixel_array_t           pixels;
-    mutable boost::uint32_t checksum;
-    mutable bool            checksum_dirty;
+    pixel_array_t   pixels;
 
 public:
-                    PixelData();
-
     void            resize(int width, int height);
     void            set(int x, int y, float r, float g, float b, float a=1.0f);
     void            set(int x, int y, Pixel p);
     void            fill(float r, float g, float b, float a);
     void            fillRect(int x0, int y0, int x1, int y1, Pixel p);
+    void            blit(int px, int py, const PixelData &data);
+
     Pixel           get(int x, int y) const;
     int             width() const;
     int             height() const;
-
-    boost::uint32_t getChecksum() const;
+    uint32_t        computeChecksum() const;
 
     bool operator==(const PixelData &o) const;
 };
@@ -111,6 +108,8 @@ public:
  * sheet in rectangles.  The source rectangle should always be equal to or
  * smaller than the padded on and should always be contained in it.
  */
+
+#if 0
 class Image
 {
 public:
@@ -143,7 +142,57 @@ public:
 
     bool loadData();
 };
+#endif
 
+
+class Image
+{
+public:
+    /* coordinates of the image in a sheet including any borders/padding */
+    int sheet_x, sheet_y;
+
+    /* size of the image including any borders/padding */
+    int width, height;
+
+    /* coordinates in a sheet of the source image data relative to [sheet_x, sheet_y] */
+    int source_x_offset, source_y_offset;
+
+    /* size of the source image */
+    int source_width, source_height;
+
+    /* normalized texture coordinates */
+    float s0, s1, t0, t1;
+
+    /* number of pixels to extrude each edge by */
+    int extrude;
+
+    /* true if the image was packed. used during packing */
+    bool is_packed;
+
+    /* true if pixel data is currently loaded */
+    bool has_data;
+
+    /* names of all images that refer to the pixel data */
+    std::vector<std::string> names;
+
+    /* modified pixel data including borders */
+    PixelData pixels;
+
+    /* pixel data checksum for equality and recreating image data */
+    uint32_t checksum;
+
+
+public:
+    bool                initialize(const std::string &name, int extrude);
+    const PixelData&    getPixels();
+    bool                equalPixelData(Image &other);
+    void                purgeMemory();
+    void                addName(const std::string &name);
+
+private:
+    bool                createImageData();
+    bool                recreateImageData();
+};
 
 /*--------------------------------------------------------------------------*
  * Node
@@ -206,6 +255,7 @@ private:
     int                         extrude;
     bool                        compact;
     bool                        power_of_two;
+    bool                        cache_images;
 
 public:
                                 Packer();
@@ -218,6 +268,7 @@ public:
     void                        setCompact(bool value);
     void                        setTexCoordOrigin(int origin);
     void                        setExtrude(int extrude);
+    void                        setCaching(bool cache);
     int                         numSheets();
     Sheet*                      getSheet(int index);
 

@@ -30,10 +30,10 @@ void PixelFloat::set(float r, float g, float b, float a)
     this->r = r; this->g = g; this->b = b; this->a = a;
 }
 
-uint8_t PixelFloat::redByte()   const { return r * 255.0f; }
-uint8_t PixelFloat::greenByte() const { return g * 255.0f; }
-uint8_t PixelFloat::blueByte()  const { return b * 255.0f; }
-uint8_t PixelFloat::alphaByte() const { return a * 255.0f; }
+uint8_t PixelFloat::redByte()   const { return static_cast<uint8_t>(r * 255.0f); }
+uint8_t PixelFloat::greenByte() const { return static_cast<uint8_t>(g * 255.0f); }
+uint8_t PixelFloat::blueByte()  const { return static_cast<uint8_t>(b * 255.0f); }
+uint8_t PixelFloat::alphaByte() const { return static_cast<uint8_t>(a * 255.0f); }
 
 bool PixelFloat::operator==(const PixelFloat &o) const
 {
@@ -87,17 +87,9 @@ bool Pixel32::operator!=(const Pixel32 &o) const { return !(*this == o); }
  *
  *--------------------------------------------------------------------------*/
 
-PixelData::PixelData()
-{
-    checksum_dirty = true;
-    checksum = 0xDEADC0DE;
-}
-
-
 void PixelData::resize(int width, int height)
 {
     pixels.resize(boost::extents[std::max(width, 0)][std::max(height, 0)]);
-    checksum_dirty = true;
 }
 
 void PixelData::set(int x, int y, float r, float g, float b, float a)
@@ -108,10 +100,7 @@ void PixelData::set(int x, int y, float r, float g, float b, float a)
 void PixelData::set(int x, int y, Pixel p)
 {
     if(0 <= x && x < width() && 0 <= y && y < height())
-    {
         pixels[x][y] = p;
-        checksum_dirty = true;
-    }
 }
 
 void PixelData::fill(float r, float g, float b, float a)
@@ -132,8 +121,19 @@ void PixelData::fillRect(int x0, int y0, int x1, int y1, Pixel p)
     for(int x = x0; x <= x1; x++)
         for(int y = y0; y <= y1; y++)
             pixels[x][y] = p;
+}
 
-    checksum_dirty = true;
+void PixelData::blit(int px, int py, const PixelData &data)
+{
+    int x0 = std::max(0, px);
+    int y0 = std::max(0, py);
+
+    int x1 = std::min(width(),  x0 + data.width());
+    int y1 = std::min(height(), y0 + data.height());
+
+    for(int x = x0; x < x1; x++)
+        for(int y = y0; y < y1; y++)
+            pixels[x][y] = data.pixels[x-x0][y-y0];
 }
 
 Pixel PixelData::get(int x, int y) const
@@ -146,33 +146,17 @@ Pixel PixelData::get(int x, int y) const
 int PixelData::width()  const { return pixels.shape()[0]; }
 int PixelData::height() const { return pixels.shape()[1]; }
 
-boost::uint32_t PixelData::getChecksum() const
+uint32_t PixelData::computeChecksum() const
 {
-    if(checksum_dirty)
-    {
-        boost::crc_32_type crc;
-        crc.process_bytes(pixels.data(), width()*height()*sizeof(Pixel));
-        checksum = crc.checksum();
-        checksum_dirty = false;
-    }
-
-    return checksum;
+    boost::crc_32_type crc;
+    crc.process_bytes(pixels.data(), width()*height()*sizeof(Pixel));
+    return crc.checksum();
 }
 
 bool PixelData::operator==(const PixelData &o) const
 {
     if(width() != o.width() || height() != o.height())
         return false;
-
-    /*
-     * FIXME I'm not sure checksums help in the general case. Most images are
-     * likely to be different so the pixel comparison will return false early
-     * enough.
-     */
-#if 0
-    if(getChecksum() != o.getChecksum())
-        return false;
-#endif
 
     for(int x = 0, w = width(); x < w; x++)
         for(int y = 0, h = height(); y < h; y++)
@@ -189,6 +173,7 @@ bool PixelData::operator==(const PixelData &o) const
  * Packed Image
  *
  *--------------------------------------------------------------------------*/
+#if 0
 Image::Image()
 {
     x = y = width = height = 0;
@@ -202,7 +187,117 @@ bool Image::loadData()
     assert(!names.empty());
     return loadImage(names.front(), pixels);
 }
+#endif
 
+
+
+
+bool Image::initialize(const std::string &name, int extrude)
+{
+    names.assign(1, name);
+    this->extrude = extrude;
+
+    sheet_x = sheet_y = width = height = 0;
+    source_x_offset = source_y_offset = source_width = source_height = 0;
+    s0 = s1 = t0 = t1 = 0.0f;
+    checksum = 0xDEADC0DE;
+    is_packed = false;
+    has_data = false;
+
+    return createImageData();
+}
+
+bool Image::createImageData()
+{
+    PixelData src_data;
+
+    if(!loadImage(names[0], src_data))
+        return false;
+
+    if(src_data.width() == 0 || src_data.height() == 0)
+        return false;
+
+    source_x_offset = extrude;
+    source_y_offset = extrude;
+    source_width    = src_data.width();
+    source_height   = src_data.height();
+    width           = src_data.width()  + extrude*2;
+    height          = src_data.height() + extrude*2;
+
+    pixels.resize(width, height);
+
+    if(extrude > 0)
+    {
+        int src_x0 = source_x_offset - 1;
+        int src_y0 = source_y_offset - 1;
+        int src_x1 = source_x_offset + source_width;
+        int src_y1 = source_y_offset + source_height;
+
+        int dst_x0 = src_x0 - extrude + 1;
+        int dst_y0 = src_y0 - extrude + 1;
+        int dst_x1 = src_x1 + extrude - 1;
+        int dst_y1 = src_y1 + extrude - 1;
+
+        pixels.fillRect(src_x0, src_y0, dst_x0, dst_y0, src_data.get(0,              0              ));
+        pixels.fillRect(src_x1, src_y0, dst_x1, dst_y0, src_data.get(source_width-1, 0              ));
+        pixels.fillRect(src_x1, src_y1, dst_x1, dst_y1, src_data.get(source_width-1, source_height-1));
+        pixels.fillRect(src_x0, src_y1, dst_x0, dst_y1, src_data.get(0,              source_height-1));
+
+        for(int x = 0; x < source_width; x++)
+        {
+            pixels.fillRect(extrude+x, src_y0, extrude+x, dst_y0, src_data.get(x, 0              ));
+            pixels.fillRect(extrude+x, src_y1, extrude+x, dst_y1, src_data.get(x, source_height-1));
+        }
+
+        for(int y = 0; y < source_height; y++)
+        {
+            pixels.fillRect(src_x0, extrude+y, dst_x0, extrude+y, src_data.get(0,              y));
+            pixels.fillRect(src_x1, extrude+y, dst_x1, extrude+y, src_data.get(source_width-1, y));
+        }
+    }
+
+    pixels.blit(extrude, extrude, src_data);
+    checksum = pixels.computeChecksum();
+    has_data = true;
+
+    return true;
+}
+
+bool Image::recreateImageData()
+{
+    int prev_w = width, prev_h = height;
+    uint32_t prev_checksum = checksum;
+
+    /*
+     * checksum should pick up any changes in the image between multiple reads
+     * from disk, but size is checked just in case different data produces the
+     * same checksum. A different size will lead to undefined behaviour while
+     * different image data will just produce incorrect output.
+     */
+    if(!createImageData() || prev_checksum != checksum || prev_w != width || prev_h != height)
+        return fatal(format("failed to reload '%s'. File changed or removed?\n"));
+    return true;
+}
+
+const PixelData& Image::getPixels()
+{
+    if(!has_data)
+        recreateImageData();
+    return pixels;
+}
+
+bool Image::equalPixelData(Image &other)
+{
+    return checksum == other.checksum && getPixels() == other.getPixels();
+}
+
+void Image::purgeMemory()
+{
+    pixels.resize(0, 0);
+    has_data = false;
+}
+
+void Image::addName(const std::string &name) { names.push_back(name); }
 
 
 /*--------------------------------------------------------------------------*
@@ -243,10 +338,8 @@ bool Sheet::insertR(Node *node, Image *img)
 
         if(img->width == node->width && img->height == node->height)
         {
-            img->x = node->x;
-            img->y = node->y;
-            img->source_x = node->x + extrude;
-            img->source_y = node->y + extrude;
+            img->sheet_x = node->x;
+            img->sheet_y = node->y;
             node->img = img;
             return true;
         }
@@ -288,43 +381,11 @@ void Sheet::blitR(Node *node, PixelData &pixels)
     
     if(node->img)
     {
-        Image *img = node->img;
+        bool purge = !node->img->has_data;
+        pixels.blit(node->x, node->y, node->img->getPixels());
 
-        if(extrude > 0)
-        {
-            int src_x0 = img->source_x - 1;
-            int src_y0 = img->source_y - 1;
-            int src_x1 = img->source_x + img->source_width;
-            int src_y1 = img->source_y + img->source_height;
-
-            int dst_x0 = src_x0 - extrude + 1;
-            int dst_y0 = src_y0 - extrude + 1;
-            int dst_x1 = src_x1 + extrude - 1;
-            int dst_y1 = src_y1 + extrude - 1;
-
-            pixels.fillRect(src_x0, src_y0, dst_x0, dst_y0, img->pixels.get(0,                   0                   ));
-            pixels.fillRect(src_x1, src_y0, dst_x1, dst_y0, img->pixels.get(img->source_width-1, 0                   ));
-            pixels.fillRect(src_x1, src_y1, dst_x1, dst_y1, img->pixels.get(img->source_width-1, img->source_height-1));
-            pixels.fillRect(src_x0, src_y1, dst_x0, dst_y1, img->pixels.get(0,                   img->source_height-1));
-
-            for(int x = 0; x < img->source_width; x++)
-            {
-                int dst_x = node->x + extrude + x;
-                pixels.fillRect(dst_x, src_y0, dst_x, dst_y0, img->pixels.get(x, 0                   ));
-                pixels.fillRect(dst_x, src_y1, dst_x, dst_y1, img->pixels.get(x, img->source_height-1));
-            }
-
-            for(int y = 0; y < img->source_height; y++)
-            {
-                int dst_y = node->y + extrude + y;
-                pixels.fillRect(src_x0, dst_y, dst_x0, dst_y, img->pixels.get(0,                   y));
-                pixels.fillRect(src_x1, dst_y, dst_x1, dst_y, img->pixels.get(img->source_width-1, y));
-            }
-        }
-
-        for(int x = 0; x < img->source_width; x++)
-            for(int y = 0; y < img->source_height; y++)
-                pixels.set(node->x + x + extrude, node->y + y + extrude, img->pixels.get(x, y));
+        if(purge)
+            node->img->purgeMemory();
     }
     
     blitR(node->left,  pixels);
@@ -359,9 +420,10 @@ Packer::Packer()
     sheet_width = sheet_height = 1024;
     sheets.reserve(32);
     tex_coord_origin = BOTTOM_LEFT;
+    extrude = 0;
     compact = false;
     power_of_two = false;
-    extrude = 0;
+    cache_images = true;
 }
 
 void Packer::pack()
@@ -495,7 +557,10 @@ void Packer::computeTexCoords()
         for(size_t j = 0, m = sheets[i]->images.size(); j < m; j++)
         {
             Image *img = sheets[i]->images[j];
-            int x = img->source_x, y = img->source_y, w = img->source_width, h = img->source_height;
+            int x = img->sheet_x + img->source_x_offset;
+            int y = img->sheet_y + img->source_y_offset;
+            int w = img->source_width;
+            int h = img->source_height;
 
             if(tex_coord_origin == BOTTOM_LEFT)
                 y = sheets[i]->height - y - h;
@@ -541,39 +606,34 @@ void Packer::addImage(const std::string &name)
         }
 
     Image *img = image_pool.construct();
-    img->names.push_back(name);
 
-    if(!img->loadData())
+    if(!img->initialize(name, extrude))
     {
-        image_pool.destroy(img);
-        return;
-    }
-
-    img->source_width  = img->pixels.width();
-    img->source_height = img->pixels.height();
-    img->width         = img->pixels.width()  + extrude*2;
-    img->height        = img->pixels.height() + extrude*2;
-
-    if(!(img->source_width > 1 && img->source_height > 1))
-    {
-        print("image is too small. requires width > 1 && height > 1\n");
         image_pool.destroy(img);
         return;
     }
 
     Image *duplicate_of = NULL;
     for(size_t i = 0, n = images.size(); i < n && !duplicate_of; i++)
-        if(img->pixels == images[i]->pixels)
+    {
+        if(img->equalPixelData(*images[i]))
             duplicate_of = images[i];
+
+        if(!cache_images)
+            images[i]->purgeMemory();
+    }
 
     if(duplicate_of)
     {
         print(format("duplicate image data ['%s' == '%s']\n") % name % duplicate_of->names[0], VERBOSE);
-        duplicate_of->names.push_back(name);
+        duplicate_of->addName(name);
         image_pool.destroy(img);
     }
     else
     {
+        if(!cache_images)
+            img->purgeMemory();
+
         images.push_back(img);
     }
 }
@@ -616,6 +676,17 @@ void Packer::setTexCoordOrigin(int origin)
 void Packer::setExtrude(int extrude)
 {
     this->extrude = std::max(0, extrude);
+}
+
+void Packer::setCaching(bool cache)
+{
+    cache_images = cache;
+
+    if(!cache_images)
+    {
+        for(size_t i = 0; i < images.size(); i++)
+            images[i]->purgeMemory();
+    }
 }
 
 int Packer::numSheets()
