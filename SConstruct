@@ -1,3 +1,5 @@
+import platform
+
 ##############################################################################
 # source and output data
 ##############################################################################
@@ -13,8 +15,12 @@ src = [
 # source help text file
 cmd_help_src = "cmd_help"
 
-# dynamic libraries
-libs = ["freeimage", "boost_program_options", "boost_filesystem"]
+# libraries
+linux_libs        = ["freeimage", "boost_program_options", "boost_filesystem"]
+
+windows_libs      = ["freeimage"]
+windows_cpp_paths = ["C:/Program Files/boost/boost_1_47/", "FreeImage"]
+windows_lib_paths = ["C:/Program Files/boost/boost_1_47/lib/", "FreeImage"]
 
 # what to save the output binary as. the binary is written to root directory.
 binary_name = "imagepack"
@@ -25,15 +31,15 @@ build_dirs = {
     "release" : "build_release",
 }
 
+os = platform.system()
+
 
 ##############################################################################
 # Command Line
 ##############################################################################
 AddOption("--build", dest="build_type", metavar="[debug|release]", type="choice", choices=["debug", "release"], default="release", help="The type of build.")
-AddOption("--no-help",dest="no-help", action="store_true", default=False, help="Set to not generate and include the help text that gets printed to the console. Set this if xxd is not installed or not in the environment's path.")
 
 build_type = GetOption("build_type")
-build_help = not GetOption("no-help")
 build_dir  = build_dirs[build_type]
 
 
@@ -42,27 +48,70 @@ build_dir  = build_dirs[build_type]
 ##############################################################################
 VariantDir(build_dir, "src")
 
-cpp_flags     = ["-Wall", "-Wextra"]
+cpp_flags     = []
 cpp_linkflags = []
 cpp_defines   = []
+cpp_path      = []
 
-if build_type == "debug":
-    cpp_flags.append(["-g"])
-elif build_type == "release":
-    cpp_defines.append("NDEBUG")
-    cpp_flags.append("-O3")
 
-if build_help:
+if os == "Linux":
+    libs = linux_libs
+    cpp_flags.append(["-Wall", "-Wextra"])
     cpp_defines.append("IMAGEPACK_BUILD_HELP")
 
-env = Environment(
-    CCFLAGS     = cpp_flags,
-    CPPDEFINES  = cpp_defines,
-    LINKFLAGS   = cpp_linkflags,
-)
+    if build_type == "debug":
+        cpp_flags.append(["-g"])
+    elif build_type == "release":
+        cpp_defines.append("NDEBUG")
+        cpp_flags.append("-O3")
+
+    env = Environment(
+        CCFLAGS     = cpp_flags,
+        CPPDEFINES  = cpp_defines,
+        LINKFLAGS   = cpp_linkflags,
+    )
+
+elif os == "Windows":
+    libs = windows_libs
+    cpp_defines += ["IMAGEPACK_BUILD_HELP", ("_ITERATOR_DEBUG_LEVEL", 0), "NOMINMAX"]
+
+    if build_type == "debug":
+        print("windows debug build not supported")
+        Exit(-1)
+    elif build_type == "release":
+        cpp_defines.append("NDEBUG")
+        cpp_flags.append(["-O2", "-MT", "-EHsc"])
+
+    env = Environment(
+        CCFLAGS     = cpp_flags,
+        CPPDEFINES  = cpp_defines,
+        LINKFLAGS   = cpp_linkflags,
+        CPPPATH     = windows_cpp_paths,
+        LIBPATH     = windows_lib_paths,
+    )
+
+else:
+    print("os not supported")
+    Exit(-1)
+
+
+##############################################################################
+# Help file generation
+##############################################################################
+def writeHelpHeader(target, source, env):
+    out = open(str(target[0]), "w")
+    out.write('#ifndef CMD_HELP_H\n')
+    out.write('#define CMD_HELP_H\n')
+    out.write('static const char *cmd_help =\n')
+    for line in open(str(source[0])):
+        line = line.replace('"', '\\"').replace('\n', '')
+        out.write('"' + line + '\\n"\n')
+    out.write(';\n')
+    out.write('#endif\n')
+    out.close()
 
 env.Append(BUILDERS = {
-    "HelpGenerator" : Builder(action="xxd -i ${SOURCE.file} ${TARGET.file}", suffix=".h")
+    "HelpGenerator" : Builder(action=writeHelpHeader, suffix=".h")
 })
 
 
@@ -70,8 +119,9 @@ env.Append(BUILDERS = {
 # Building
 ##############################################################################
 
-if build_help:
-    cmd_help = env.HelpGenerator(cmd_help_src, chdir=1, srcdir=build_dir)
+cmd_help = env.HelpGenerator(cmd_help_src, srcdir=build_dir)
+objs = env.Object(src, srcdir=build_dir)
+prog = env.Program(binary_name, objs, LIBS=libs, srcdir=build_dir)
 
-prog = env.Program(binary_name, src, LIBS=libs, srcdir=build_dir)
+Depends(objs, cmd_help)
 

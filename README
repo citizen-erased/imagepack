@@ -1,12 +1,21 @@
+---------- Dependencies ----------
+Required libraries:
+
+    FreeImage:
+        http://freeimage.sourceforge.net/
+
+    boost_program_options & boost_filesystem:
+        http://www.boost.org/
+
+
+
+Build tools:
+
+    SCons:
+        http://www.scons.org/
+
+
 ---------- Building ----------
-
-required libraries: freeimage, boost, boost_program_options, boost_filesystem
-
-xxd must be installed and in the path to generate the program's command line
-help text (also found below in the Manual section).  If xxd is not available
-imagepack can be compiled without help text.
-
-
 Linux:
 
     SCons is used as the program's build tool. Compiling can be done by running
@@ -14,13 +23,6 @@ Linux:
 
       $ scons
 
-
-
-    If xxd isn't available build using the --no-help switch:
-
-      $ scons --no-help
-
-    
 
     Building can also be done easily on the command line using your c++
     compiler. This will not build the command line help.
@@ -30,9 +32,20 @@ Linux:
 
 
 Windows:
-    soon...
+    Run SCons in the root directory:
 
+      $ scons
 
+    
+    Visual Studio can also be used to build imagepack:
+      1. Add the source files to a project.
+      2. Specify any required freeimage/boost libraries and folders.
+         boost should automatically link required libraries so usually only
+         freeimage needs to be specified.
+      3. Define "_ITERATOR_DEBUG_LEVEL=0" and "NOMINMAX".
+      4. Compile.
+      
+      Note: the command line help text will not be built.
 
 
 ---------- Licence ----------
